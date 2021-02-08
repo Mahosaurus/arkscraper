@@ -53,11 +53,14 @@ if __name__ == '__main__':
     @app.route('/', methods=['GET'])
     def provide():
         while True:
+            print("Requesting the data...")
             get_data()
             NEW_COMPANIES = get_companies()
             if len(COMPANIES) != len(NEW_COMPANIES):
                 print("Alert!")
                 print(COMPANIES.difference(NEW_COMPANIES))
+                WEBHOOK = os.environ.get("WEBHOOK")
+                request.post(WEBHOOK)
             time.sleep(60)
 
     print("Starting app...")
