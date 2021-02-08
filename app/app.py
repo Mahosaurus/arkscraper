@@ -11,7 +11,7 @@ import subprocess
 
 import PyPDF2
 
-from flask import Flask, render_template, request, redirect, flash, send_file
+from flask import Flask, render_template, redirect, flash, send_file
 from flask import request
 
 from gevent.pywsgi import WSGIServer
@@ -52,8 +52,20 @@ def provide():
     if len(COMPANIES) != len(NEW_COMPANIES):
         print("Alert!")
         print(COMPANIES.difference(NEW_COMPANIES))
+        res = COMPANIES.difference(NEW_COMPANIES)
         WEBHOOK = os.environ.get("WEBHOOK")
-        request.post(WEBHOOK)
+        payload ={
+                "due":
+                "a"
+                ,
+                "email":
+                "b"
+                ,
+                "task":
+                    res
+                }
+        headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
+        res = requests.post(WEBHOOK, json=payload, headers=headers)
 
 if __name__ == '__main__':
     app = Flask(__name__)
@@ -66,7 +78,7 @@ if __name__ == '__main__':
     print("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=60)
+    scheduler.add_job(func=provide, trigger="interval", seconds=1000)
     scheduler.start()
 
     # Shut down the scheduler when exiting the app
