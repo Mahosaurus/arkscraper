@@ -66,7 +66,7 @@ if __name__ == '__main__':
     print("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=2)
+    scheduler.add_job(func=provide, trigger="interval", seconds=60)
     scheduler.start()
 
     # Shut down the scheduler when exiting the app
