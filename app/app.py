@@ -16,8 +16,11 @@ from flask import request
 
 from gevent.pywsgi import WSGIServer
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
 import time
 from pprint import pprint
+import datetime
 
 def get_data():
     URL="https://ark-funds.com/wp-content/fundsiteliterature/holdings/ARK_INNOVATION_ETF_ARKK_HOLDINGS.pdf"
@@ -41,6 +44,17 @@ def get_companies():
                 pass
     return set(COMPANIES)
 
+def provide():
+    print(datetime.datetime.now())
+    print("Requesting the data...")
+    get_data()
+    NEW_COMPANIES = get_companies()
+    if len(COMPANIES) != len(NEW_COMPANIES):
+        print("Alert!")
+        print(COMPANIES.difference(NEW_COMPANIES))
+        WEBHOOK = os.environ.get("WEBHOOK")
+        request.post(WEBHOOK)
+
 if __name__ == '__main__':
     app = Flask(__name__)
 
@@ -50,18 +64,13 @@ if __name__ == '__main__':
     pprint(COMPANIES)
 
     print("Running app...")
-    @app.route('/', methods=['GET'])
-    def provide():
-        while True:
-            print("Requesting the data...")
-            get_data()
-            NEW_COMPANIES = get_companies()
-            if len(COMPANIES) != len(NEW_COMPANIES):
-                print("Alert!")
-                print(COMPANIES.difference(NEW_COMPANIES))
-                WEBHOOK = os.environ.get("WEBHOOK")
-                request.post(WEBHOOK)
-            time.sleep(60)
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=provide, trigger="interval", seconds=2)
+    scheduler.start()
+
+    # Shut down the scheduler when exiting the app
+    #atexit.register(lambda: scheduler.shutdown())
 
     print("Starting app...")
     HTTP_SERVER = WSGIServer(('0.0.0.0', int(5555)), app)
