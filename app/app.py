@@ -50,10 +50,15 @@ def provide():
     get_data()
     NEW_COMPANIES = get_companies()
     if len(COMPANIES) != len(NEW_COMPANIES):
-        print("Alert!")
-        print(COMPANIES.difference(NEW_COMPANIES))
+        print("Something changed!")
         res = COMPANIES.difference(NEW_COMPANIES)
+        print(res)
+
         WEBHOOK = os.environ.get("WEBHOOK")
+        if WEBHOOK == "":
+            print("No Webhook Env Var provided")
+            return
+
         payload ={
                 "due":
                 "a"
