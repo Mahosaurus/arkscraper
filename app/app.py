@@ -139,7 +139,10 @@ def provide():
         print("No change in share")
 
     if res_sets or res_share:
-        COMPANIES = NEW_COMPANIES
+        with open("COMPANIES.pkl", "wb") as write_file:
+            pickle.dump(NEW_COMPANIES, write_file)
+        with open("COMPANY_DICT.pkl", "wb") as write_file:
+            pickle.dump(NEW_COMPANY_DICT, write_file)
         print("Setting new companies as standard")
 
 if __name__ == '__main__':
