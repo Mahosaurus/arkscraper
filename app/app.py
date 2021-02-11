@@ -1,4 +1,4 @@
-import json
+import pickle
 import os
 import requests
 
@@ -14,6 +14,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from pprint import pprint
 import datetime
 
+WEBHOOK = os.environ.get("WEBHOOK")
+if WEBHOOK == "":
+    print("No Webhook Env Var provided")
+
 def get_data():
     URL="https://ark-funds.com/wp-content/fundsiteliterature/holdings/ARK_INNOVATION_ETF_ARKK_HOLDINGS.pdf"
     PDF = requests.get(URL, stream=True)
@@ -21,35 +25,60 @@ def get_data():
         for chunk in PDF.iter_content(2000):
             fd.write(chunk)
 
-def get_companies():
+def read_pdf():
     file = open('tmp.pdf', 'rb')
     fileReader = PyPDF2.PdfFileReader(file)
     content = fileReader.getPage(0).extractText()
-    COMPANIES = []
+    return content
+
+def compare_sets(COMPANIES, NEW_COMPANIES):
+    if len(COMPANIES) != len(NEW_COMPANIES):
+        print("Something changed!")
+        res = COMPANIES.difference(NEW_COMPANIES)
+        print(res)
+        return res
+    return []
+
+def compare_share(COMPANIES, NEW_COMPANIES):
+    result = {}
+    for stock in COMPANIES:
+        try:
+            old_share = int(COMPANIES[stock])
+        except:
+            continue
+        try:
+            new_share = int(NEW_COMPANIES[stock])
+        except:
+            continue
+        if old_share != new_share:
+            result[old_share] = old_share - new_share
+    return result
+
+def get_companies():
+    content = read_pdf()
     split_by_newline = content.split("\n")
     share_index = 0
-    company_dict = OrderedDict()
+    COMPANIES = []
+    COMPANY_DICT = OrderedDict()
     curr_comp = "Company"
     for el in split_by_newline:
-        if share_index == 3:
-            company_dict[curr_comp] = el
+        if share_index == 3: # Case of no shares
+            COMPANY_DICT[curr_comp] = el
             share_index = 0
         if share_index < 3 and share_index != 0:
             share_index += 1
-        if el.startswith("€"):
+        if el.startswith("€"): # Case of company name
             share_index = 1
             tmp = el.split(" ")
             try:
                 curr_comp = tmp[1].lower()
                 COMPANIES.append(curr_comp)
-                company_dict[curr_comp] = ""
+                COMPANY_DICT[curr_comp] = ""
             except Exception as exc:
                 pass
 
-    with open("COMPANIES.json", "w") as write_file:
-        json.dump(company_dict, write_file)
-
-    return set(COMPANIES)
+    COMPANIES = set(COMPANIES)
+    return COMPANIES, COMPANY_DICT
 
 def lifesign():
     with open('lifesign', 'w') as fd:
@@ -58,18 +87,25 @@ def lifesign():
 def provide():
     print(datetime.datetime.now())
     print("Requesting the data...")
+    try:
+        with open('COMPANIES.pkl', 'rb') as json_file:
+            COMPANIES = pickle.load(json_file)
+        with open('COMPANY_DICT.pkl', 'rb') as json_file:
+            COMPANY_DICT = pickle.load(json_file)
+    except:
+        print("--> Getting data the first time...")
+        get_data()
+        COMPANIES, COMPANY_DICT = get_companies()
+        with open("COMPANIES.pkl", "wb") as write_file:
+            pickle.dump(COMPANIES, write_file)
+        with open("COMPANY_DICT.pkl", "wb") as write_file:
+            pickle.dump(COMPANY_DICT, write_file)
+
     get_data()
-    NEW_COMPANIES = get_companies()
-    if len(COMPANIES) != len(NEW_COMPANIES):
-        print("Something changed!")
-        res = COMPANIES.difference(NEW_COMPANIES)
-        print(res)
+    NEW_COMPANIES, NEW_COMPANY_DICT = get_companies()
 
-        WEBHOOK = os.environ.get("WEBHOOK")
-        if WEBHOOK == "":
-            print("No Webhook Env Var provided")
-            return
-
+    res_sets = compare_sets(COMPANIES, NEW_COMPANIES)
+    if res_sets:
         payload ={
                 "due":
                 "a"
@@ -78,23 +114,42 @@ def provide():
                 "b"
                 ,
                 "task":
-                    res
+                    res_sets
                 }
         headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-        res = requests.post(WEBHOOK, json=payload, headers=headers)
+        requests.post(WEBHOOK, json=payload, headers=headers)
+    else:
+        print("No change in sets")
+
+    res_share = compare_share(COMPANY_DICT, NEW_COMPANY_DICT)
+    if res_share:
+        payload ={
+                "due":
+                "a"
+                ,
+                "email":
+                "b"
+                ,
+                "task":
+                    res_share
+                }
+        headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
+        requests.post(WEBHOOK, json=payload, headers=headers)
+    else:
+        print("No change in share")
+
+    if res_sets or res_share:
+        COMPANIES = NEW_COMPANIES
+        print("Setting new companies as standard")
 
 if __name__ == '__main__':
     app = Flask(__name__)
 
-    get_data()
-    COMPANIES = get_companies()
-    pprint(len(COMPANIES))
-    pprint(COMPANIES)
-
+    print(datetime.datetime.now())
     print("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=10000)
+    scheduler.add_job(func=provide, trigger="interval", seconds=600)
     scheduler.add_job(func=lifesign, trigger="interval", seconds=3)
     scheduler.start()
 

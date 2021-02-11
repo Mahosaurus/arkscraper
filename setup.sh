@@ -1,3 +1,4 @@
+# First time
 mkdir arkscraper
 ssh-keygen
 cat .ssh/id_rsa.pub
@@ -8,5 +9,12 @@ sudo apt-get update
 sudo apt install -yy python3-pip
 pip3 install -r requirements.txt
 EXPORT WEBHOOK=""
+cd app
+python3 app.py
+
+# After that
+pkill -f python
+cd arkscraper
+git pull
 cd app
 python3 app.py

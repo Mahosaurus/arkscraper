@@ -2,3 +2,5 @@
 .vscode/*
 arkscraper/
 id_rsa*
+*.pkl
+lifesign
