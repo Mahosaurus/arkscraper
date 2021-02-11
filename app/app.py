@@ -1,24 +1,16 @@
-import logging
+import json
 import os
-
-from pathlib import Path
-from collections import defaultdict
-
-import random
 import requests
-import string
-import subprocess
 
+from collections import OrderedDict
 import PyPDF2
 
-from flask import Flask, render_template, redirect, flash, send_file
-from flask import request
+from flask import Flask
 
 from gevent.pywsgi import WSGIServer
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-import time
 from pprint import pprint
 import datetime
 
@@ -35,14 +27,33 @@ def get_companies():
     content = fileReader.getPage(0).extractText()
     COMPANIES = []
     split_by_newline = content.split("\n")
+    share_index = 0
+    company_dict = OrderedDict()
+    curr_comp = "Company"
     for el in split_by_newline:
+        if share_index == 3:
+            company_dict[curr_comp] = el
+            share_index = 0
+        if share_index < 3 and share_index != 0:
+            share_index += 1
         if el.startswith("€"):
+            share_index = 1
             tmp = el.split(" ")
             try:
-                COMPANIES.append(tmp[1])
+                curr_comp = tmp[1].lower()
+                COMPANIES.append(curr_comp)
+                company_dict[curr_comp] = ""
             except Exception as exc:
                 pass
+
+    with open("COMPANIES.json", "w") as write_file:
+        json.dump(company_dict, write_file)
+
     return set(COMPANIES)
+
+def lifesign():
+    with open('lifesign', 'w') as fd:
+        fd.write("")
 
 def provide():
     print(datetime.datetime.now())
@@ -83,7 +94,8 @@ if __name__ == '__main__':
     print("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=1000)
+    scheduler.add_job(func=provide, trigger="interval", seconds=10000)
+    scheduler.add_job(func=lifesign, trigger="interval", seconds=3)
     scheduler.start()
 
     # Shut down the scheduler when exiting the app
@@ -92,4 +104,3 @@ if __name__ == '__main__':
     print("Starting app...")
     HTTP_SERVER = WSGIServer(('0.0.0.0', int(5555)), app)
     HTTP_SERVER.serve_forever()
-
