@@ -1,3 +1,4 @@
+import atexit
 import pickle
 import os
 import requests
@@ -14,9 +15,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from pprint import pprint
 import datetime
 
+import logging
+
+logging.basicConfig(filename='app.log', filemode='a', format='%(asctime)s: %(name)s - %(levelname)s - %(message)s', level="INFO")
+
 WEBHOOK = os.environ.get("WEBHOOK")
 if WEBHOOK == "":
-    print("No Webhook Env Var provided")
+    logging.critical("No Webhook Env Var provided")
 
 def get_data():
     URL="https://ark-funds.com/wp-content/fundsiteliterature/holdings/ARK_INNOVATION_ETF_ARKK_HOLDINGS.pdf"
@@ -33,9 +38,9 @@ def read_pdf():
 
 def compare_sets(COMPANIES, NEW_COMPANIES):
     if len(COMPANIES) != len(NEW_COMPANIES):
-        print("Something changed!")
+        logging.info("Something changed in Company Sets!")
         res = COMPANIES.difference(NEW_COMPANIES)
-        print(res)
+        logging.info(res)
         return res
     return []
 
@@ -43,15 +48,17 @@ def compare_share(COMPANIES, NEW_COMPANIES):
     result = {}
     for stock in COMPANIES:
         try:
-            old_share = int(COMPANIES[stock])
+            old_share = int(COMPANIES[stock].replace(",", ""))
         except:
             continue
         try:
-            new_share = int(NEW_COMPANIES[stock])
+            new_share = int(NEW_COMPANIES[stock].replace(",", ""))
         except:
             continue
         if old_share != new_share:
             result[old_share] = old_share - new_share
+            logging.info("Compare share found a difference!")
+            logging.info(result[old_share])
     return result
 
 def get_companies():
@@ -80,20 +87,16 @@ def get_companies():
     COMPANIES = set(COMPANIES)
     return COMPANIES, COMPANY_DICT
 
-def lifesign():
-    with open('lifesign', 'w') as fd:
-        fd.write("")
-
 def provide():
-    print(datetime.datetime.now())
-    print("Requesting the data...")
+    logging.info(datetime.datetime.now())
+    logging.info("Requesting the data...")
     try:
         with open('COMPANIES.pkl', 'rb') as json_file:
             COMPANIES = pickle.load(json_file)
         with open('COMPANY_DICT.pkl', 'rb') as json_file:
             COMPANY_DICT = pickle.load(json_file)
     except:
-        print("--> Getting data the first time...")
+        logging.info("--> Getting data the first time...")
         get_data()
         COMPANIES, COMPANY_DICT = get_companies()
         with open("COMPANIES.pkl", "wb") as write_file:
@@ -119,7 +122,7 @@ def provide():
         headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
         requests.post(WEBHOOK, json=payload, headers=headers)
     else:
-        print("No change in sets")
+        logging.info("No change in sets")
 
     res_share = compare_share(COMPANY_DICT, NEW_COMPANY_DICT)
     if res_share:
@@ -136,29 +139,27 @@ def provide():
         headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
         requests.post(WEBHOOK, json=payload, headers=headers)
     else:
-        print("No change in share")
+        logging.info("No change in share")
 
     if res_sets or res_share:
         with open("COMPANIES.pkl", "wb") as write_file:
             pickle.dump(NEW_COMPANIES, write_file)
         with open("COMPANY_DICT.pkl", "wb") as write_file:
             pickle.dump(NEW_COMPANY_DICT, write_file)
-        print("Setting new companies as standard")
+        logging.info("Setting new companies as standard")
 
 if __name__ == '__main__':
     app = Flask(__name__)
 
-    print(datetime.datetime.now())
-    print("Running app...")
+    logging.info("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=600)
-    scheduler.add_job(func=lifesign, trigger="interval", seconds=3)
+    scheduler.add_job(func=provide, trigger="interval", seconds=1000)
     scheduler.start()
 
     # Shut down the scheduler when exiting the app
     #atexit.register(lambda: scheduler.shutdown())
 
-    print("Starting app...")
+    logging.info("Starting app...")
     HTTP_SERVER = WSGIServer(('0.0.0.0', int(5555)), app)
     HTTP_SERVER.serve_forever()
