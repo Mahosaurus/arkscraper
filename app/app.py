@@ -161,7 +161,7 @@ if __name__ == '__main__':
     logging.info("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=15)
+    scheduler.add_job(func=provide, trigger="interval", seconds=3000)
     scheduler.start()
 
     # Shut down the scheduler when exiting the app
