@@ -121,6 +121,7 @@ def provide():
                 }
         headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
         requests.post(WEBHOOK, json=payload, headers=headers)
+        return
     else:
         logging.info("No change in sets")
 
