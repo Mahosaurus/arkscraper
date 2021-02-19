@@ -20,7 +20,7 @@ import logging
 logging.basicConfig(filename='app.log', filemode='a', format='%(asctime)s: %(name)s - %(levelname)s - %(message)s', level="INFO")
 
 WEBHOOK = os.environ.get("WEBHOOK")
-if WEBHOOK == "":
+if WEBHOOK is None:
     logging.critical("No Webhook Env Var provided")
 
 def get_data():
@@ -154,7 +154,7 @@ if __name__ == '__main__':
     logging.info("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=1000)
+    scheduler.add_job(func=provide, trigger="interval", seconds=2000)
     scheduler.start()
 
     # Shut down the scheduler when exiting the app
