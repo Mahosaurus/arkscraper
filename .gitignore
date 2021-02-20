@@ -4,3 +4,4 @@ arkscraper/
 id_rsa*
 *.pkl
 *.log
+*.pyc

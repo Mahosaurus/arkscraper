@@ -17,4 +17,5 @@ sudo pkill -f python
 cd arkscraper
 git pull
 cd app
+export WEBHOOK=""
 python3 app.py
