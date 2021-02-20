@@ -6,7 +6,7 @@ import sys
 import requests
 
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Tuple
 import PyPDF2
 
 from flask import Flask
@@ -56,7 +56,7 @@ def get_companies(content):
             share_index = 1
             tmp = el.split(" ")
             try:
-                curr_comp = tmp[1].lower()
+                curr_comp = " ".join(tmp[1:]).lower()
                 COMPANIES.append(curr_comp)
                 COMPANY_DICT[curr_comp] = ""
             except Exception as exc:
@@ -66,13 +66,15 @@ def get_companies(content):
     return COMPANIES, COMPANY_DICT
 
 
-def compare_sets(COMPANIES: set, NEW_COMPANIES: set) -> Optional[str]:
+def compare_sets(COMPANIES: set, NEW_COMPANIES: set) -> Tuple[Optional[str], Optional[str]]:
     if len(COMPANIES) != len(NEW_COMPANIES):
         logging.info("Something changed in Company Sets!")
-        res = COMPANIES.symmetric_difference(NEW_COMPANIES)
-        logging.info(res)
-        return ",".join(res)
-    return None
+        removed = COMPANIES.difference(NEW_COMPANIES)
+        added = NEW_COMPANIES.difference(COMPANIES)
+        removed = ",".join(removed)
+        added = ",".join(added)
+        return removed, added
+    return None, None
 
 def compare_share(COMPANIES: set, NEW_COMPANIES: set):
     result = OrderedDict()
@@ -87,9 +89,34 @@ def compare_share(COMPANIES: set, NEW_COMPANIES: set):
             continue
         if old_share != new_share:
             result[stock] = old_share - new_share
-            logging.info("Compare share found a difference!")
-            logging.info(result[stock])
-    return result
+    formatted_result = "<br>".join([key + ": " + str(result[key]) for key in result])
+    if result:
+        logging.info("Compare share found a difference!")
+    return formatted_result
+
+def send_payload(removed: str = "", added: str = "", changes= ""):
+    if added == "":
+        added = "/"
+    if removed == "":
+        removed = "/"
+    if changes == "":
+        changes = "/"
+
+    payload ={
+        "added":
+            added
+        ,
+        "changes":
+            changes
+        ,
+        "removed":
+            removed
+        }
+    headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
+    req = requests.post(WEBHOOK, json=payload, headers=headers)
+    if req.status_code == 200:
+        logging.info("Sent a mail! Payload was:")
+        logging.info(payload)
 
 def provide():
     logging.info(datetime.datetime.now())
@@ -110,50 +137,23 @@ def provide():
             pickle.dump(COMPANY_DICT, write_file)
 
     get_data()
-    content = read_pdf()
+    content = read_pdf("tmp.pdf")
     NEW_COMPANIES, NEW_COMPANY_DICT = get_companies(content)
 
-    res_sets = compare_sets(COMPANIES, NEW_COMPANIES)
-    if res_sets:
-        payload ={
-                "due":
-                "a"
-                ,
-                "email":
-                "Oh Wunder! Eine Veränderung in der Zusammensetzung ist geschehen. Ha det godt! Din Maleficus"
-                ,
-                "task":
-                    res_sets
-                }
-        headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-        requests.post(WEBHOOK, json=payload, headers=headers)
-        time.sleep(15)
+    removed, added = compare_sets(COMPANIES, NEW_COMPANIES)
+    res_share = compare_share(COMPANY_DICT, NEW_COMPANY_DICT)
+    if removed or added or res_share:
+        send_payload(removed, added, res_share)
     else:
         logging.info("No change in sets")
 
-    res_share = compare_share(COMPANY_DICT, NEW_COMPANY_DICT)
-    if res_share:
-        payload ={
-                "due":
-                "a"
-                ,
-                "email":
-                "Oh je mine! Eine Veränderung in den Anteilen ist geschehen. Ha det bedre! Din Malefiz"
-                ,
-                "task":
-                    res_share
-                }
-        headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-        requests.post(WEBHOOK, json=payload, headers=headers)
-    else:
-        logging.info("No change in share")
-
-    if res_sets or res_share:
+    # Update local cache
+    if removed or added or res_share:
         with open("COMPANIES.pkl", "wb") as write_file:
             pickle.dump(NEW_COMPANIES, write_file)
         with open("COMPANY_DICT.pkl", "wb") as write_file:
             pickle.dump(NEW_COMPANY_DICT, write_file)
-        logging.info("Setting new companies as standard")
+        logging.info("Setting new data as standard")
 
 if __name__ == '__main__':
     app = Flask(__name__)
@@ -161,7 +161,7 @@ if __name__ == '__main__':
     logging.info("Running app...")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=provide, trigger="interval", seconds=3000)
+    scheduler.add_job(func=provide, trigger="interval", seconds=10)
     scheduler.start()
 
     # Shut down the scheduler when exiting the app
